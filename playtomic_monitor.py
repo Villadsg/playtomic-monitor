@@ -286,6 +286,9 @@ def check_all_clubs():
             else:
                 send_telegram(combined)
 
+    if not notifications:
+        send_telegram("✅ Nothing new")
+
     # Save state for next run
     save_state(new_state)
     log.info(f"State saved. Next check in {POLL_INTERVAL_SECONDS}s.")
