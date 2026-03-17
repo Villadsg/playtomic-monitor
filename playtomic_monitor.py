@@ -74,6 +74,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("playtomic")
 
+# Counter file to track checks for "nothing new" throttling
+CHECK_COUNTER_FILE = Path(__file__).parent / ".playtomic_counter"
+
 
 def send_telegram(message: str):
     """Send a message via Telegram bot."""
@@ -289,7 +292,16 @@ def check_all_clubs():
                 send_telegram(combined)
 
     if not notifications:
-        send_telegram("✅ Nothing new")
+        # Only send "nothing new" every 15 checks (~1 hour)
+        counter = int(CHECK_COUNTER_FILE.read_text()) if CHECK_COUNTER_FILE.exists() else 0
+        counter += 1
+        CHECK_COUNTER_FILE.write_text(str(counter))
+        if counter >= 15:
+            send_telegram("✅ Nothing new")
+            CHECK_COUNTER_FILE.write_text("0")
+    else:
+        # Reset counter when there are notifications
+        CHECK_COUNTER_FILE.write_text("0")
 
     # Save state for next run
     save_state(new_state)

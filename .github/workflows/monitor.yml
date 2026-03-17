@@ -28,7 +28,9 @@ jobs:
       - name: Restore state
         uses: actions/cache@v4
         with:
-          path: .playtomic_state.json
+          path: |
+            .playtomic_state.json
+            .playtomic_counter
           key: playtomic-state-${{ github.run_id }}
           restore-keys: playtomic-state-
 
