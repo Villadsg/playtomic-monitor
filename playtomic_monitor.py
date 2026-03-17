@@ -291,18 +291,6 @@ def check_all_clubs():
             else:
                 send_telegram(combined)
 
-    if not notifications:
-        # Only send "nothing new" every 15 checks (~1 hour)
-        counter = int(CHECK_COUNTER_FILE.read_text()) if CHECK_COUNTER_FILE.exists() else 0
-        counter += 1
-        CHECK_COUNTER_FILE.write_text(str(counter))
-        if counter >= 15:
-            send_telegram("✅ Nothing new")
-            CHECK_COUNTER_FILE.write_text("0")
-    else:
-        # Reset counter when there are notifications
-        CHECK_COUNTER_FILE.write_text("0")
-
     # Save state for next run
     save_state(new_state)
     log.info(f"State saved. Next check in {POLL_INTERVAL_SECONDS}s.")
