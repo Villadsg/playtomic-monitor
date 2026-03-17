@@ -265,6 +265,14 @@ def check_all_clubs():
                 rid, st = slot_str.split("|", 1)
                 msg = format_slot_message(club_name, rid, st)
                 notifications.append(msg)
+        elif not current_slots and previous_slots:
+            # All slots just became unavailable — notify once
+            notifications.append(
+                f"❌ <b>Nothing available</b>\n"
+                f"📍 {club_name}\n"
+                f"No free courts Mon–Fri after 18:00"
+            )
+            log.info(f"  → All slots gone at {club_name}")
         else:
             log.info(f"  → No new slots at {club_name}")
 
