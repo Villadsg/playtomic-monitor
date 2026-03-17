@@ -4,5 +4,11 @@
     "tenant_id": "27e43506-5fec-4b77-ba06-fa24c7d30d12",
     "desired_hours": [["18:00", "21:00"]],
     "desired_days": [0, 1, 2, 3, 4]
+  },
+  {
+    "name": "Spc Puente De Praga",
+    "tenant_id": "bd0df226-e0db-47c6-bdfb-4586ba4ad5cb",
+    "desired_hours": [["18:00", "21:00"]],
+    "desired_days": [0, 1, 2, 3, 4]
   }
 ]
