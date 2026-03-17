@@ -204,14 +204,7 @@ def format_slot_message(club_name: str, resource_id: str, start_time: str) -> st
         day_str = "?"
         time_str = start_time
 
-    return (
-        f"🎾 <b>Court available!</b>\n"
-        f"📍 {club_name}\n"
-        f"🏟️ Court: {resource_id}\n"
-        f"📅 {day_str}\n"
-        f"🕐 {time_str}\n"
-        f"\n👉 Book now on Playtomic!"
-    )
+    return f"📍 {club_name} — {day_str} {time_str}"
 
 
 def check_all_clubs():
