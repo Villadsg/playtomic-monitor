@@ -2,9 +2,14 @@ name: Playtomic Court Monitor
 
 on:
   schedule:
-    # Run every 4 minutes
-    - cron: '*/4 * * * *'
+    # Restart hourly in case the previous run ended
+    - cron: '0 * * * *'
   workflow_dispatch: # Allow manual trigger
+
+# Only allow one instance at a time
+concurrency:
+  group: playtomic-monitor
+  cancel-in-progress: false
 
 jobs:
   check-courts:
@@ -27,8 +32,16 @@ jobs:
           key: playtomic-state-${{ github.run_id }}
           restore-keys: playtomic-state-
 
-      - name: Check court availability
+      - name: Check court availability (loop for 55 min)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python playtomic_monitor.py once
+        run: |
+          for i in $(seq 1 13); do
+            echo "=== Check $i/13 ==="
+            python playtomic_monitor.py once
+            if [ $i -lt 13 ]; then
+              echo "Sleeping 4 minutes..."
+              sleep 240
+            fi
+          done
