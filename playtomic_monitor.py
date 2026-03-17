@@ -122,9 +122,11 @@ def fetch_availability(tenant_id: str, date: datetime) -> list:
             return resp.json()
         else:
             log.warning(f"API returned {resp.status_code} for tenant {tenant_id} on {date.date()}")
+            send_telegram(f"⚠️ API error {resp.status_code} for {tenant_id}")
             return []
     except Exception as e:
         log.error(f"API request failed: {e}")
+        send_telegram(f"⚠️ API request failed: {e}")
         return []
 
 
