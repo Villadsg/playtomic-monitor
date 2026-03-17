@@ -1,0 +1,8 @@
+[
+  {
+    "name": "Pádel Los Nogales",
+    "tenant_id": "27e43506-5fec-4b77-ba06-fa24c7d30d12",
+    "desired_hours": [["18:00", "21:00"]],
+    "desired_days": [0, 1, 2, 3, 4]
+  }
+]

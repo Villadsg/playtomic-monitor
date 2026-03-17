@@ -46,24 +46,19 @@ LOOKAHEAD_DAYS = 7
 # Sport: "PADEL", "TENNIS", "BADMINTON", etc.
 SPORT_ID = "PADEL"
 
-# Define your clubs and desired time windows
-# To find a tenant_id: go to playtomic.io → navigate to the club → check the URL
-# Example URL: https://playtomic.io/padel-madrid-centro/a1b2c3d4-...
-CLUBS = [
-    {
-        "name": "Pádel Los Nogales",
-        "tenant_id": "27e43506-5fec-4b77-ba06-fa24c7d30d12",
-        "desired_hours": [("18:00", "21:00")],
-        "desired_days": [0, 1, 2, 3, 4],  # Mon-Fri
-    },
-    # Add more clubs:
-    # {
-    #     "name": "Another Club",
-    #     "tenant_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    #     "desired_hours": [("09:00", "11:00"), ("18:00", "21:00")],
-    #     "desired_days": [5, 6],  # weekends only
-    # },
-]
+# Clubs are loaded from clubs.json — edit that file to add/remove clubs
+CLUBS_FILE = Path(__file__).parent / "clubs.json"
+
+def load_clubs():
+    """Load clubs config from clubs.json."""
+    if CLUBS_FILE.exists():
+        with open(CLUBS_FILE) as f:
+            clubs = json.load(f)
+        # Convert hour lists to tuples
+        for club in clubs:
+            club["desired_hours"] = [tuple(h) for h in club["desired_hours"]]
+        return clubs
+    return []
 
 # ============================================================================
 # END CONFIGURATION
@@ -224,8 +219,9 @@ def check_all_clubs():
     state = load_state()
     new_state = {}
     notifications = []
+    clubs = load_clubs()
 
-    for club in CLUBS:
+    for club in clubs:
         club_name = club["name"]
         tenant_id = club["tenant_id"]
         desired_hours = club["desired_hours"]
@@ -362,7 +358,7 @@ if __name__ == "__main__":
     else:
         # Continuous polling mode
         log.info("Starting Playtomic Court Monitor (continuous mode)")
-        log.info(f"Monitoring {len(CLUBS)} club(s), polling every {POLL_INTERVAL_SECONDS}s")
+        log.info(f"Monitoring {len(load_clubs())} club(s), polling every {POLL_INTERVAL_SECONDS}s")
 
         # Send startup notification
         send_telegram("🟢 Playtomic monitor started! Watching for court cancellations...")
