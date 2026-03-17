@@ -2,8 +2,8 @@ name: Playtomic Court Monitor
 
 on:
   schedule:
-    # Run every 5 minutes
-    - cron: '*/5 * * * *'
+    # Run every 4 minutes
+    - cron: '*/4 * * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
