@@ -28,6 +28,7 @@ import os
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # ============================================================================
 # CONFIGURATION — Edit these values
@@ -257,7 +258,8 @@ def extract_open_matches(matches: list, desired_hours: list, desired_days: list)
             continue
 
         try:
-            dt = datetime.fromisoformat(start_date.replace("Z", "+00:00").split("+")[0])
+            dt_utc = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            dt = dt_utc.astimezone(ZoneInfo("Europe/Madrid")).replace(tzinfo=None)
         except ValueError:
             continue
 
