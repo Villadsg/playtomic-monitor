@@ -28,7 +28,6 @@ import os
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 # ============================================================================
 # CONFIGURATION — Edit these values
@@ -158,15 +157,12 @@ def extract_slots(availability_data: list, desired_hours: list, desired_days: li
             if not start_time or not start_date:
                 continue
 
-            # Build full datetime from date + time, convert UTC to Madrid
+            # Build full datetime from date + time (API returns local Madrid time)
             full_dt_str = f"{start_date}T{start_time}"
             try:
-                dt_utc = datetime.fromisoformat(full_dt_str).replace(tzinfo=ZoneInfo("UTC"))
-                dt = dt_utc.astimezone(ZoneInfo("Europe/Madrid")).replace(tzinfo=None)
+                dt = datetime.fromisoformat(full_dt_str)
             except ValueError:
                 continue
-
-            local_dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
 
             # Check day of week
             if dt.weekday() not in desired_days:
@@ -181,7 +177,7 @@ def extract_slots(availability_data: list, desired_hours: list, desired_days: li
             if not in_window:
                 continue
 
-            slot_key = (resource_id, local_dt_str)
+            slot_key = (resource_id, full_dt_str)
             matching_slots.add(slot_key)
 
     return matching_slots
@@ -261,8 +257,7 @@ def extract_open_matches(matches: list, desired_hours: list, desired_days: list)
             continue
 
         try:
-            dt_utc = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-            dt = dt_utc.astimezone(ZoneInfo("Europe/Madrid")).replace(tzinfo=None)
+            dt = datetime.fromisoformat(start_date.replace("Z", ""))
         except ValueError:
             continue
 
