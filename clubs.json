@@ -6,12 +6,6 @@
     "desired_days": [0, 1, 2, 3, 4]
   },
   {
-    "name": "Spc Puente De Praga",
-    "tenant_id": "bd0df226-e0db-47c6-bdfb-4586ba4ad5cb",
-    "desired_hours": [["18:00", "21:00"]],
-    "desired_days": [0, 1, 2, 3, 4]
-  },
-  {
     "name": "Centro Delicias Madrid",
     "tenant_id": "55a3a6af-3916-4a8e-9158-16b33f36567d",
     "desired_hours": [["18:00", "21:00"]],

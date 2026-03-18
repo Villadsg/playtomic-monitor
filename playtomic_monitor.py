@@ -66,6 +66,7 @@ def load_clubs():
 
 API_BASE = "https://api.playtomic.io/v1"
 STATE_FILE = Path(__file__).parent / ".playtomic_state.json"
+MATCHES_STATE_FILE = Path(__file__).parent / ".playtomic_matches_state.json"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -125,11 +126,9 @@ def fetch_availability(tenant_id: str, date: datetime) -> list:
             return resp.json()
         else:
             log.warning(f"API returned {resp.status_code} for tenant {tenant_id} on {date.date()}")
-            send_telegram(f"⚠️ API error {resp.status_code} for {tenant_id}")
             return []
     except Exception as e:
         log.error(f"API request failed: {e}")
-        send_telegram(f"⚠️ API request failed: {e}")
         return []
 
 
@@ -210,6 +209,168 @@ def format_slot_message(club_name: str, resource_id: str, start_time: str) -> st
         time_str = start_time
 
     return f"📍 {club_name} — {day_str} {time_str}"
+
+
+def fetch_open_matches(tenant_id: str) -> list:
+    """Fetch open matches for a given tenant."""
+    params = {
+        "sport_id": SPORT_ID,
+        "tenant_id": tenant_id,
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; CourtMonitor/1.0)",
+        "Accept": "application/json",
+    }
+
+    try:
+        resp = requests.get(
+            f"{API_BASE}/matches",
+            params=params,
+            headers=headers,
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            log.warning(f"Matches API returned {resp.status_code} for tenant {tenant_id}")
+            return []
+    except Exception as e:
+        log.error(f"Matches API request failed: {e}")
+        return []
+
+
+def extract_open_matches(matches: list, desired_hours: list, desired_days: list) -> set:
+    """
+    Parse matches API response and return a set of match identifiers
+    that have open spots and match desired time windows/days.
+
+    Each match key is: "match_id|YYYY-MM-DDTHH:MM:SS|players/max"
+    """
+    today = datetime.now()
+    cutoff = today + timedelta(days=LOOKAHEAD_DAYS)
+    matching = set()
+
+    for match in matches:
+        match_id = match.get("match_id", "unknown")
+        start_date = match.get("start_date", "")
+        if not start_date:
+            continue
+
+        try:
+            dt = datetime.fromisoformat(start_date.replace("Z", "+00:00").split("+")[0])
+        except ValueError:
+            continue
+
+        # Must be in the future and within lookahead
+        if dt < today or dt > cutoff:
+            continue
+
+        # Check day of week
+        if dt.weekday() not in desired_days:
+            continue
+
+        # Check time window
+        time_str = dt.strftime("%H:%M")
+        in_window = any(
+            time_in_range(h_start, h_end, time_str)
+            for h_start, h_end in desired_hours
+        )
+        if not in_window:
+            continue
+
+        # Count players vs max
+        teams = match.get("teams", [])
+        total_players = sum(len(team.get("players", [])) for team in teams)
+        max_players = match.get("max_players", 4)
+
+        if total_players >= max_players:
+            continue
+
+        match_key = f"{match_id}|{dt.strftime('%Y-%m-%dT%H:%M:%S')}|{total_players}/{max_players}"
+        matching.add(match_key)
+
+    return matching
+
+
+def load_matches_state() -> dict:
+    """Load previous known matches from disk."""
+    if MATCHES_STATE_FILE.exists():
+        try:
+            return json.loads(MATCHES_STATE_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def save_matches_state(state: dict):
+    """Persist known matches to disk."""
+    MATCHES_STATE_FILE.write_text(json.dumps(state, indent=2))
+
+
+def check_open_matches():
+    """Check for open matches (partidos abiertos) at all clubs."""
+    state = load_matches_state()
+    new_state = {}
+    notifications = []
+    clubs = load_clubs()
+
+    for club in clubs:
+        club_name = club["name"]
+        tenant_id = club["tenant_id"]
+        desired_hours = club["desired_hours"]
+        desired_days = club["desired_days"]
+
+        log.info(f"Checking open matches at {club_name}...")
+
+        matches = fetch_open_matches(tenant_id)
+        current_matches = extract_open_matches(matches, desired_hours, desired_days)
+
+        # Use match_id|datetime as the comparison key (strip player count for diffing)
+        current_keys = {m.rsplit("|", 1)[0] for m in current_matches}
+        previous_keys = set(state.get(tenant_id, []))
+
+        new_keys = current_keys - previous_keys
+
+        if new_keys:
+            log.info(f"  → {len(new_keys)} new open match(es) at {club_name}!")
+            # Find full match info for new keys
+            for match_str in sorted(current_matches):
+                key = match_str.rsplit("|", 1)[0]
+                if key in new_keys:
+                    _mid, dt_str, players_str = match_str.split("|")
+                    try:
+                        dt = datetime.fromisoformat(dt_str)
+                        day_str = dt.strftime("%A %d %B")
+                        time_str = dt.strftime("%H:%M")
+                    except Exception:
+                        day_str = "?"
+                        time_str = dt_str
+                    notifications.append(
+                        f"🏓 Open match at {club_name} — {day_str} {time_str} ({players_str} players)"
+                    )
+        else:
+            log.info(f"  → No new open matches at {club_name}")
+
+        new_state[tenant_id] = list(current_keys)
+        time.sleep(1)
+
+    # Send notifications
+    if notifications:
+        if len(notifications) <= 3:
+            for msg in notifications:
+                send_telegram(msg)
+                time.sleep(0.5)
+        else:
+            header = f"🏓 <b>{len(notifications)} new open matches found!</b>\n\n"
+            combined = header + "\n---\n".join(notifications)
+            if len(combined) > 4000:
+                for msg in notifications:
+                    send_telegram(msg)
+                    time.sleep(0.5)
+            else:
+                send_telegram(combined)
+
+    save_matches_state(new_state)
 
 
 def check_all_clubs():
@@ -293,6 +454,10 @@ def check_all_clubs():
 
     # Save state for next run
     save_state(new_state)
+
+    # Also check for open matches
+    check_open_matches()
+
     log.info(f"State saved. Next check in {POLL_INTERVAL_SECONDS}s.")
 
 
