@@ -158,12 +158,15 @@ def extract_slots(availability_data: list, desired_hours: list, desired_days: li
             if not start_time or not start_date:
                 continue
 
-            # Build full datetime from date + time
+            # Build full datetime from date + time, convert UTC to Madrid
             full_dt_str = f"{start_date}T{start_time}"
             try:
-                dt = datetime.fromisoformat(full_dt_str)
+                dt_utc = datetime.fromisoformat(full_dt_str).replace(tzinfo=ZoneInfo("UTC"))
+                dt = dt_utc.astimezone(ZoneInfo("Europe/Madrid")).replace(tzinfo=None)
             except ValueError:
                 continue
+
+            local_dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
 
             # Check day of week
             if dt.weekday() not in desired_days:
@@ -178,7 +181,7 @@ def extract_slots(availability_data: list, desired_hours: list, desired_days: li
             if not in_window:
                 continue
 
-            slot_key = (resource_id, full_dt_str)
+            slot_key = (resource_id, local_dt_str)
             matching_slots.add(slot_key)
 
     return matching_slots
