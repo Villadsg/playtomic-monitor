@@ -57,6 +57,11 @@ def load_clubs():
         # Convert hour lists to tuples
         for club in clubs:
             club["desired_hours"] = [tuple(h) for h in club["desired_hours"]]
+            club.setdefault("weekend_hours", [])
+            club["weekend_hours"] = [tuple(h) for h in club["weekend_hours"]]
+            club.setdefault("weekend_days", [])
+            # Combine all active days for day-level iteration
+            club["all_days"] = club["desired_days"] + club["weekend_days"]
         return clubs
     return []
 
@@ -137,7 +142,16 @@ def time_in_range(start_str: str, end_str: str, check_time: str) -> bool:
     return start_str <= check_time < end_str
 
 
-def extract_slots(availability_data: list, desired_hours: list, desired_days: list) -> set:
+def get_hours_for_day(club: dict, weekday: int) -> list:
+    """Return the desired hours for a given day of the week."""
+    if weekday in club.get("weekend_days", []):
+        return club.get("weekend_hours", [])
+    if weekday in club["desired_days"]:
+        return club["desired_hours"]
+    return []
+
+
+def extract_slots(availability_data: list, club: dict) -> set:
     """
     Parse API response and return a set of slot identifiers that match
     the desired time windows and days.
@@ -164,15 +178,16 @@ def extract_slots(availability_data: list, desired_hours: list, desired_days: li
             except ValueError:
                 continue
 
-            # Check day of week
-            if dt.weekday() not in desired_days:
+            # Get hours for this day of the week
+            hours = get_hours_for_day(club, dt.weekday())
+            if not hours:
                 continue
 
             # Check time window
             time_str = dt.strftime("%H:%M")
             in_window = any(
                 time_in_range(h_start, h_end, time_str)
-                for h_start, h_end in desired_hours
+                for h_start, h_end in hours
             )
             if not in_window:
                 continue
@@ -238,7 +253,7 @@ def fetch_open_matches(tenant_id: str) -> list:
         return []
 
 
-def extract_open_matches(matches: list, desired_hours: list, desired_days: list) -> set:
+def extract_open_matches(matches: list, club: dict) -> set:
     """
     Parse matches API response and return a set of match identifiers
     that have open spots and match desired time windows/days.
@@ -264,15 +279,16 @@ def extract_open_matches(matches: list, desired_hours: list, desired_days: list)
         if dt < today or dt > cutoff:
             continue
 
-        # Check day of week
-        if dt.weekday() not in desired_days:
+        # Get hours for this day of the week
+        hours = get_hours_for_day(club, dt.weekday())
+        if not hours:
             continue
 
         # Check time window
         time_str = dt.strftime("%H:%M")
         in_window = any(
             time_in_range(h_start, h_end, time_str)
-            for h_start, h_end in desired_hours
+            for h_start, h_end in hours
         )
         if not in_window:
             continue
@@ -316,13 +332,11 @@ def check_open_matches():
     for club in clubs:
         club_name = club["name"]
         tenant_id = club["tenant_id"]
-        desired_hours = club["desired_hours"]
-        desired_days = club["desired_days"]
 
         log.info(f"Checking open matches at {club_name}...")
 
         matches = fetch_open_matches(tenant_id)
-        current_matches = extract_open_matches(matches, desired_hours, desired_days)
+        current_matches = extract_open_matches(matches, club)
 
         # Use match_id|datetime as the comparison key (strip player count for diffing)
         current_keys = {m.rsplit("|", 1)[0] for m in current_matches}
@@ -382,8 +396,6 @@ def check_all_clubs():
     for club in clubs:
         club_name = club["name"]
         tenant_id = club["tenant_id"]
-        desired_hours = club["desired_hours"]
-        desired_days = club["desired_days"]
         club_key = tenant_id
 
         log.info(f"Checking {club_name}...")
@@ -396,11 +408,11 @@ def check_all_clubs():
             target_date = today + timedelta(days=day_offset)
 
             # Skip days we don't care about
-            if target_date.weekday() not in desired_days:
+            if target_date.weekday() not in club["all_days"]:
                 continue
 
             availability = fetch_availability(tenant_id, target_date)
-            slots = extract_slots(availability, desired_hours, desired_days)
+            slots = extract_slots(availability, club)
             all_matching_slots.update(slots)
 
             # Small delay between requests to be polite
