@@ -143,12 +143,12 @@ def extract_slots(availability_data: list, desired_hours: list, desired_days: li
     the desired time windows and days.
 
     API returns: start_date as "YYYY-MM-DD", start_time as "HH:MM:SS"
-    Each slot is a tuple: (resource_id, "YYYY-MM-DDTHH:MM:SS")
+    Returns a set of datetime strings: "YYYY-MM-DDTHH:MM:SS"
+    Deduplicates by time (multiple courts at the same hour count as one).
     """
     matching_slots = set()
 
     for resource in availability_data:
-        resource_id = resource.get("resource_id", "unknown")
         start_date = resource.get("start_date", "")
         slots = resource.get("slots", [])
 
@@ -177,8 +177,7 @@ def extract_slots(availability_data: list, desired_hours: list, desired_days: li
             if not in_window:
                 continue
 
-            slot_key = (resource_id, full_dt_str)
-            matching_slots.add(slot_key)
+            matching_slots.add(full_dt_str)
 
     return matching_slots
 
@@ -198,7 +197,7 @@ def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
-def format_slot_message(club_name: str, resource_id: str, start_time: str) -> str:
+def format_slot_message(club_name: str, start_time: str) -> str:
     """Format a human-readable notification for a new slot."""
     try:
         dt = datetime.fromisoformat(start_time)
@@ -407,8 +406,7 @@ def check_all_clubs():
             # Small delay between requests to be polite
             time.sleep(1)
 
-        # Convert to comparable format
-        current_slots = {f"{rid}|{st}" for rid, st in all_matching_slots}
+        current_slots = all_matching_slots
         previous_slots = set(state.get(club_key, []))
 
         # New slots = currently available but weren't before (cancellations!)
@@ -417,8 +415,7 @@ def check_all_clubs():
         if new_slots:
             log.info(f"  → {len(new_slots)} new slot(s) found at {club_name}!")
             for slot_str in sorted(new_slots):
-                rid, st = slot_str.split("|", 1)
-                msg = format_slot_message(club_name, rid, st)
+                msg = format_slot_message(club_name, slot_str)
                 notifications.append(msg)
         elif not current_slots and previous_slots:
             # All slots just became unavailable — notify once
