@@ -216,8 +216,9 @@ def format_slot_message(club_name: str, start_time: str) -> str:
     """Format a human-readable notification for a new slot."""
     try:
         dt = datetime.fromisoformat(start_time)
-        day_str = dt.strftime("%A %d %B")
-        time_str = dt.strftime("%H:%M")
+        display_dt = dt + timedelta(hours=1)
+        day_str = display_dt.strftime("%A %d %B")
+        time_str = display_dt.strftime("%H:%M")
     except Exception:
         day_str = "?"
         time_str = start_time
@@ -353,8 +354,9 @@ def check_open_matches():
                     _mid, dt_str, players_str = match_str.split("|")
                     try:
                         dt = datetime.fromisoformat(dt_str)
-                        day_str = dt.strftime("%A %d %B")
-                        time_str = dt.strftime("%H:%M")
+                        display_dt = dt + timedelta(hours=1)
+                        day_str = display_dt.strftime("%A %d %B")
+                        time_str = display_dt.strftime("%H:%M")
                     except Exception:
                         day_str = "?"
                         time_str = dt_str
