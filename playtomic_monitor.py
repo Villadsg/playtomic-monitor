@@ -464,8 +464,8 @@ def check_all_clubs():
     # Save state for next run
     save_state(new_state)
 
-    # Also check for open matches
-    check_open_matches()
+    # Open match check disabled for now
+    # check_open_matches()
 
     log.info(f"State saved. Next check in {POLL_INTERVAL_SECONDS}s.")
 

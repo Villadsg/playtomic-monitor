@@ -30,5 +30,21 @@
     "desired_days": [0, 1, 2, 3, 4],
     "weekend_hours": [["08:00", "13:00"]],
     "weekend_days": [5, 6]
+  },
+  {
+    "name": "Nexus Padel Villaverde",
+    "tenant_id": "12ef056b-06f9-4b7a-8e89-46cd5db27edf",
+    "desired_hours": [["18:00", "21:00"]],
+    "desired_days": [0, 1, 2, 3, 4],
+    "weekend_hours": [["08:00", "13:00"]],
+    "weekend_days": [5, 6]
+  },
+  {
+    "name": "BamVolea Ciudad de la Raqueta",
+    "tenant_id": "da78dd3c-43b3-11e8-8674-52540049669c",
+    "desired_hours": [["18:00", "21:00"]],
+    "desired_days": [0, 1, 2, 3, 4],
+    "weekend_hours": [["08:00", "13:00"]],
+    "weekend_days": [5, 6]
   }
 ]
