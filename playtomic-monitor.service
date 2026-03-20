@@ -1,0 +1,16 @@
+[Unit]
+Description=Playtomic Court Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gvj
+WorkingDirectory=/home/gvj/Documents/playtomic
+EnvironmentFile=/home/gvj/Documents/playtomic/.env
+ExecStart=/usr/bin/python3 /home/gvj/Documents/playtomic/playtomic_monitor.py
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
