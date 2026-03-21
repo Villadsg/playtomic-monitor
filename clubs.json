@@ -37,7 +37,8 @@
     "desired_hours": [["18:00", "21:00"]],
     "desired_days": [0, 1, 2, 3, 4],
     "weekend_hours": [["08:00", "13:00"]],
-    "weekend_days": [5, 6]
+    "weekend_days": [5, 6],
+    "indoor_only": true
   },
   {
     "name": "BamVolea Ciudad de la Raqueta",
@@ -45,6 +46,7 @@
     "desired_hours": [["18:00", "21:00"]],
     "desired_days": [0, 1, 2, 3, 4],
     "weekend_hours": [["08:00", "13:00"]],
-    "weekend_days": [5, 6]
+    "weekend_days": [5, 6],
+    "indoor_only": true
   }
 ]

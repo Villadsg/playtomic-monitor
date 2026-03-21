@@ -162,9 +162,16 @@ def extract_slots(availability_data: list, club: dict) -> set:
     """
     matching_slots = set()
 
+    indoor_only = club.get("indoor_only", False)
+
     for resource in availability_data:
         start_date = resource.get("start_date", "")
         slots = resource.get("slots", [])
+
+        if indoor_only:
+            resource_name = resource.get("resource_name", "").lower()
+            if "indoor" not in resource_name:
+                continue
 
         for slot in slots:
             start_time = slot.get("start_time", "")
