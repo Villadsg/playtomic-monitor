@@ -2,8 +2,8 @@ name: Playtomic Court Monitor
 
 on:
   schedule:
-    # Restart hourly, 7am-1am Madrid time (5am-11pm UTC)
-    - cron: '0 5-23 * * *'
+    # Restart hourly, 8am-11pm Madrid time (6am-9pm UTC)
+    - cron: '0 6-21 * * *'
   workflow_dispatch: # Allow manual trigger
 
 # Only allow one instance at a time

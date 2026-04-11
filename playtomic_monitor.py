@@ -428,24 +428,19 @@ def check_all_clubs():
             time.sleep(1)
 
         current_slots = all_matching_slots
+        first_run = club_key not in state
         previous_slots = set(state.get(club_key, []))
 
         # New slots = currently available but weren't before (cancellations!)
         new_slots = current_slots - previous_slots
 
-        if new_slots:
+        if new_slots and first_run:
+            log.info(f"  → First run for {club_name}, seeding state with {len(current_slots)} slot(s), no notification.")
+        elif new_slots:
             log.info(f"  → {len(new_slots)} new slot(s) found at {club_name}!")
             for slot_str in sorted(new_slots):
                 msg = format_slot_message(club_name, slot_str)
                 notifications.append(msg)
-        elif not current_slots and previous_slots:
-            # All slots just became unavailable — notify once
-            notifications.append(
-                f"❌ <b>Nothing available</b>\n"
-                f"📍 {club_name}\n"
-                f"No free courts Mon–Fri after 18:00"
-            )
-            log.info(f"  → All slots gone at {club_name}")
         else:
             log.info(f"  → No new slots at {club_name}")
 
@@ -453,6 +448,10 @@ def check_all_clubs():
 
     # Send notifications
     if notifications:
+        if len(notifications) > 7:
+            log.info(f"  → Skipping {len(notifications)} notifications (likely stale state, not a real burst)")
+            save_state(new_state)
+            return
         # Group into a single message if few, or send individually
         if len(notifications) <= 3:
             for msg in notifications:
