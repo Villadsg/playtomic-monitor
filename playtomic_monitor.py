@@ -43,8 +43,8 @@ POLL_INTERVAL_SECONDS = 300  # 5 minutes
 # How many days ahead to check
 LOOKAHEAD_DAYS = 7
 
-# How many days ahead to check for open matches (today + tomorrow)
-OPEN_MATCH_LOOKAHEAD_DAYS = 2
+# How many days ahead to check for open matches (0 = today only, 1 = today + tomorrow)
+OPEN_MATCH_LOOKAHEAD_DAYS = 1
 
 # Sport: "PADEL", "TENNIS", "BADMINTON", etc.
 SPORT_ID = "PADEL"
@@ -285,7 +285,7 @@ def extract_open_matches(matches: list, club: dict) -> set:
     Each match key is: "match_id|YYYY-MM-DDTHH:MM:SS|players/max"
     """
     today = datetime.now()
-    cutoff = today + timedelta(days=OPEN_MATCH_LOOKAHEAD_DAYS)
+    max_date = (today + timedelta(days=OPEN_MATCH_LOOKAHEAD_DAYS)).date()
     matching = set()
 
     for match in matches:
@@ -300,7 +300,7 @@ def extract_open_matches(matches: list, club: dict) -> set:
             continue
 
         # Must be in the future and within lookahead (today + tomorrow, any hour)
-        if dt < today or dt > cutoff:
+        if dt < today or dt.date() > max_date:
             continue
 
         # Count players vs max
