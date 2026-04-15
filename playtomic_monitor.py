@@ -43,6 +43,9 @@ POLL_INTERVAL_SECONDS = 300  # 5 minutes
 # How many days ahead to check
 LOOKAHEAD_DAYS = 7
 
+# How many days ahead to check for open matches (today + tomorrow)
+OPEN_MATCH_LOOKAHEAD_DAYS = 2
+
 # Sport: "PADEL", "TENNIS", "BADMINTON", etc.
 SPORT_ID = "PADEL"
 
@@ -53,7 +56,9 @@ def load_clubs():
     """Load clubs config from clubs.json."""
     if CLUBS_FILE.exists():
         with open(CLUBS_FILE) as f:
-            clubs = json.load(f)
+            data = json.load(f)
+        # Support both old flat array and new object format
+        clubs = data["clubs"] if isinstance(data, dict) else data
         # Convert hour lists to tuples
         for club in clubs:
             club["desired_hours"] = [tuple(h) for h in club["desired_hours"]]
@@ -65,6 +70,16 @@ def load_clubs():
         return clubs
     return []
 
+
+def load_radius_config() -> dict:
+    """Load the open_match_radius_search config from clubs.json."""
+    if CLUBS_FILE.exists():
+        with open(CLUBS_FILE) as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data.get("open_match_radius_search", {})
+    return {}
+
 # ============================================================================
 # END CONFIGURATION
 # ============================================================================
@@ -72,6 +87,7 @@ def load_clubs():
 API_BASE = "https://api.playtomic.io/v1"
 STATE_FILE = Path(__file__).parent / ".playtomic_state.json"
 MATCHES_STATE_FILE = Path(__file__).parent / ".playtomic_matches_state.json"
+RADIUS_MATCHES_STATE_FILE = Path(__file__).parent / ".playtomic_radius_matches_state.json"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -269,7 +285,7 @@ def extract_open_matches(matches: list, club: dict) -> set:
     Each match key is: "match_id|YYYY-MM-DDTHH:MM:SS|players/max"
     """
     today = datetime.now()
-    cutoff = today + timedelta(days=LOOKAHEAD_DAYS)
+    cutoff = today + timedelta(days=OPEN_MATCH_LOOKAHEAD_DAYS)
     matching = set()
 
     for match in matches:
@@ -283,22 +299,8 @@ def extract_open_matches(matches: list, club: dict) -> set:
         except ValueError:
             continue
 
-        # Must be in the future and within lookahead
+        # Must be in the future and within lookahead (today + tomorrow, any hour)
         if dt < today or dt > cutoff:
-            continue
-
-        # Get hours for this day of the week
-        hours = get_hours_for_day(club, dt.weekday())
-        if not hours:
-            continue
-
-        # Check time window
-        time_str = dt.strftime("%H:%M")
-        in_window = any(
-            time_in_range(h_start, h_end, time_str)
-            for h_start, h_end in hours
-        )
-        if not in_window:
             continue
 
         # Count players vs max
@@ -395,6 +397,126 @@ def check_open_matches():
     save_matches_state(new_state)
 
 
+def fetch_tenants_in_radius(lat: float, lon: float, radius_m: int) -> list:
+    """Discover all active clubs within a geographic radius via /v1/tenants."""
+    params = {
+        "user_id": "me",
+        "playtomic_status": "ACTIVE",
+        "coordinate": f"{lat},{lon}",
+        "sport_id": SPORT_ID,
+        "radius": str(radius_m),
+        "size": "40",
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; CourtMonitor/1.0)",
+        "Accept": "application/json",
+    }
+    try:
+        resp = requests.get(f"{API_BASE}/tenants", params=params, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            tenants = resp.json()
+            return [
+                {"tenant_id": t.get("tenant_id"), "name": t.get("tenant_name", "Unknown")}
+                for t in tenants
+                if t.get("tenant_id")
+            ]
+        else:
+            log.warning(f"Tenants API returned {resp.status_code}")
+            return []
+    except Exception as e:
+        log.error(f"Tenants API request failed: {e}")
+        return []
+
+
+def load_radius_matches_state() -> dict:
+    """Load previous known radius-search matches from disk."""
+    if RADIUS_MATCHES_STATE_FILE.exists():
+        try:
+            return json.loads(RADIUS_MATCHES_STATE_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def save_radius_matches_state(state: dict):
+    """Persist known radius-search matches to disk."""
+    RADIUS_MATCHES_STATE_FILE.write_text(json.dumps(state, indent=2))
+
+
+def check_open_matches_radius():
+    """Check for open matches within a geographic radius."""
+    config = load_radius_config()
+    if not config or not config.get("enabled"):
+        return
+
+    lat = config["latitude"]
+    lon = config["longitude"]
+    radius_m = config["radius_m"]
+    excluded = set(config.get("excluded_tenant_ids", []))
+
+    log.info(f"Discovering clubs within {radius_m}m of ({lat:.4f}, {lon:.4f})...")
+    tenants = fetch_tenants_in_radius(lat, lon, radius_m)
+    tenants = [t for t in tenants if t["tenant_id"] not in excluded]
+    log.info(f"  → Found {len(tenants)} club(s) in radius")
+
+    state = load_radius_matches_state()
+    new_state = {}
+    notifications = []
+
+    for tenant in tenants:
+        tid = tenant["tenant_id"]
+        name = tenant["name"]
+
+        log.info(f"  Checking open matches at {name} (radius)...")
+        matches = fetch_open_matches(tid)
+        current_matches = extract_open_matches(matches, {})
+
+        current_keys = {m.rsplit("|", 1)[0] for m in current_matches}
+        previous_keys = set(state.get(tid, []))
+
+        new_keys = current_keys - previous_keys
+
+        if new_keys:
+            log.info(f"    → {len(new_keys)} new open match(es) at {name}!")
+            for match_str in sorted(current_matches):
+                key = match_str.rsplit("|", 1)[0]
+                if key in new_keys:
+                    _mid, dt_str, players_str = match_str.split("|")
+                    try:
+                        dt = datetime.fromisoformat(dt_str)
+                        display_dt = dt + timedelta(hours=1)
+                        day_str = display_dt.strftime("%A %d %B")
+                        time_str = display_dt.strftime("%H:%M")
+                    except Exception:
+                        day_str = "?"
+                        time_str = dt_str
+                    notifications.append(
+                        f"🏓 Open match at {name} — {day_str} {time_str} ({players_str} players)"
+                    )
+        else:
+            log.info(f"    → No new open matches at {name}")
+
+        new_state[tid] = list(current_keys)
+        time.sleep(1)
+
+    if notifications:
+        if len(notifications) <= 3:
+            for msg in notifications:
+                send_telegram(msg)
+                time.sleep(0.5)
+        else:
+            header = f"🏓 <b>{len(notifications)} new open matches found nearby!</b>\n\n"
+            combined = header + "\n---\n".join(notifications)
+            if len(combined) > 4000:
+                for msg in notifications:
+                    send_telegram(msg)
+                    time.sleep(0.5)
+            else:
+                send_telegram(combined)
+
+    save_radius_matches_state(new_state)
+
+
 def check_all_clubs():
     """Main check loop: fetch availability for all clubs, diff against known state, notify."""
     state = load_state()
@@ -472,8 +594,8 @@ def check_all_clubs():
     # Save state for next run
     save_state(new_state)
 
-    # Open match check disabled for now
-    # check_open_matches()
+    check_open_matches()
+    check_open_matches_radius()
 
     log.info(f"State saved. Next check in {POLL_INTERVAL_SECONDS}s.")
 

@@ -31,6 +31,7 @@ jobs:
           path: |
             .playtomic_state.json
             .playtomic_matches_state.json
+            .playtomic_radius_matches_state.json
             .playtomic_counter
           key: playtomic-state-${{ github.run_id }}
           restore-keys: playtomic-state-

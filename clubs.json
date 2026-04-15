@@ -1,52 +1,61 @@
-[
-  {
-    "name": "Pádel Los Nogales",
-    "tenant_id": "27e43506-5fec-4b77-ba06-fa24c7d30d12",
-    "desired_hours": [["18:00", "21:00"]],
-    "desired_days": [0, 1, 2, 3, 4],
-    "weekend_hours": [["08:00", "13:00"]],
-    "weekend_days": [5, 6]
-  },
-  {
-    "name": "Centro Delicias Madrid",
-    "tenant_id": "55a3a6af-3916-4a8e-9158-16b33f36567d",
-    "desired_hours": [["18:00", "21:00"]],
-    "desired_days": [0, 1, 2, 3, 4],
-    "weekend_hours": [["08:00", "13:00"]],
-    "weekend_days": [5, 6]
-  },
-  {
-    "name": "Río Arena Pádel",
-    "tenant_id": "afaed770-9de0-4c57-b8e6-aa1951d23798",
-    "desired_hours": [["18:00", "21:00"]],
-    "desired_days": [0, 1, 2, 3, 4],
-    "weekend_hours": [["08:00", "13:00"]],
-    "weekend_days": [5, 6]
-  },
-  {
-    "name": "FMP Canal De Isabel II",
-    "tenant_id": "da776daf-43b3-11e8-8674-52540049669c",
-    "desired_hours": [["18:00", "21:00"]],
-    "desired_days": [0, 1, 2, 3, 4],
-    "weekend_hours": [["08:00", "13:00"]],
-    "weekend_days": [5, 6]
-  },
-  {
-    "name": "Nexus Padel Villaverde",
-    "tenant_id": "12ef056b-06f9-4b7a-8e89-46cd5db27edf",
-    "desired_hours": [["18:00", "21:00"]],
-    "desired_days": [0, 1, 2, 3, 4],
-    "weekend_hours": [["08:00", "13:00"]],
-    "weekend_days": [5, 6],
-    "indoor_only": true
-  },
-  {
-    "name": "BamVolea Ciudad de la Raqueta",
-    "tenant_id": "da78dd3c-43b3-11e8-8674-52540049669c",
-    "desired_hours": [["18:00", "21:00"]],
-    "desired_days": [0, 1, 2, 3, 4],
-    "weekend_hours": [["08:00", "13:00"]],
-    "weekend_days": [5, 6],
-    "indoor_only": true
+{
+  "clubs": [
+    {
+      "name": "Pádel Los Nogales",
+      "tenant_id": "27e43506-5fec-4b77-ba06-fa24c7d30d12",
+      "desired_hours": [["18:00", "21:00"]],
+      "desired_days": [0, 1, 2, 3, 4],
+      "weekend_hours": [["08:00", "13:00"]],
+      "weekend_days": [5, 6]
+    },
+    {
+      "name": "Centro Delicias Madrid",
+      "tenant_id": "55a3a6af-3916-4a8e-9158-16b33f36567d",
+      "desired_hours": [["18:00", "21:00"]],
+      "desired_days": [0, 1, 2, 3, 4],
+      "weekend_hours": [["08:00", "13:00"]],
+      "weekend_days": [5, 6]
+    },
+    {
+      "name": "Río Arena Pádel",
+      "tenant_id": "afaed770-9de0-4c57-b8e6-aa1951d23798",
+      "desired_hours": [["18:00", "21:00"]],
+      "desired_days": [0, 1, 2, 3, 4],
+      "weekend_hours": [["08:00", "13:00"]],
+      "weekend_days": [5, 6]
+    },
+    {
+      "name": "FMP Canal De Isabel II",
+      "tenant_id": "da776daf-43b3-11e8-8674-52540049669c",
+      "desired_hours": [["18:00", "21:00"]],
+      "desired_days": [0, 1, 2, 3, 4],
+      "weekend_hours": [["08:00", "13:00"]],
+      "weekend_days": [5, 6]
+    },
+    {
+      "name": "Nexus Padel Villaverde",
+      "tenant_id": "12ef056b-06f9-4b7a-8e89-46cd5db27edf",
+      "desired_hours": [["18:00", "21:00"]],
+      "desired_days": [0, 1, 2, 3, 4],
+      "weekend_hours": [["08:00", "13:00"]],
+      "weekend_days": [5, 6],
+      "indoor_only": true
+    },
+    {
+      "name": "BamVolea Ciudad de la Raqueta",
+      "tenant_id": "da78dd3c-43b3-11e8-8674-52540049669c",
+      "desired_hours": [["18:00", "21:00"]],
+      "desired_days": [0, 1, 2, 3, 4],
+      "weekend_hours": [["08:00", "13:00"]],
+      "weekend_days": [5, 6],
+      "indoor_only": true
+    }
+  ],
+  "open_match_radius_search": {
+    "enabled": true,
+    "latitude": 40.40596080353859,
+    "longitude": -3.723305246417292,
+    "radius_m": 3000,
+    "excluded_tenant_ids": ["bd0df226-e0db-47c6-bdfb-4586ba4ad5cb"]
   }
-]
+}
