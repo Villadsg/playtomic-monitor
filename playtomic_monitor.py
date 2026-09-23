@@ -3,19 +3,18 @@
 Playtomic Court Availability Monitor
 =====================================
 Polls the Playtomic API for court availability at specific clubs and time slots.
-Sends a Telegram notification when a new slot becomes available (e.g. cancellation).
+Sends an ntfy notification when a new slot becomes available (e.g. cancellation).
 
 Setup:
-  1. Create a Telegram bot via @BotFather → get your BOT_TOKEN
-  2. Send a message to your bot, then visit:
-     https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
-     to find your CHAT_ID
+  1. Install the ntfy app (https://ntfy.sh) on your phone and subscribe
+     to a random topic name (e.g. "padel-x7k2q" — hard to guess so strangers can't spam you)
+  2. Set the NTFY_TOPIC env var to that topic name
   3. Find your club's tenant_id:
      - Go to https://playtomic.io and navigate to your club
      - The URL looks like: https://playtomic.io/club-name/TENANT_ID
      - Or open DevTools → Network tab → filter "availability" to see the tenant_id
   4. Configure the CLUBS list below
-  5. Run: python3 playtomic_monitor.py
+  4. Run: python3 playtomic_monitor.py
 
 Requirements:
   pip install requests
@@ -33,9 +32,10 @@ from pathlib import Path
 # CONFIGURATION — Edit these values
 # ============================================================================
 
-# Telegram Bot credentials
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+# ntfy notification settings
+NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
+NTFY_TOKEN = os.environ.get("NTFY_TOKEN", "")  # optional, only for protected topics
 
 # Polling interval in seconds (be respectful — 5 min is a good default)
 POLL_INTERVAL_SECONDS = 300  # 5 minutes
@@ -100,21 +100,26 @@ log = logging.getLogger("playtomic")
 CHECK_COUNTER_FILE = Path(__file__).parent / ".playtomic_counter"
 
 
-def send_telegram(message: str):
-    """Send a message via Telegram bot."""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
+def send_ntfy(message: str, title: str = "Playtomic monitor"):
+    """Send a push notification via ntfy."""
+    if not NTFY_TOPIC:
+        log.error("NTFY_TOPIC is not set — cannot send notification")
+        return
+    url = f"{NTFY_SERVER.rstrip('/')}/{NTFY_TOPIC}"
+    headers = {
+        "Title": title,
+        "Priority": "high",
+        "Tags": "tennis",
+        "Markdown": "yes",
     }
+    if NTFY_TOKEN:
+        headers["Authorization"] = f"Bearer {NTFY_TOKEN}"
     try:
-        resp = requests.post(url, json=payload, timeout=10)
-        if resp.status_code != 200:
-            log.error(f"Telegram error {resp.status_code}: {resp.text}")
+        resp = requests.post(url, data=message.encode("utf-8"), headers=headers, timeout=10)
+        if resp.status_code >= 400:
+            log.error(f"ntfy error {resp.status_code}: {resp.text}")
     except Exception as e:
-        log.error(f"Telegram send failed: {e}")
+        log.error(f"ntfy send failed: {e}")
 
 
 def fetch_availability(tenant_id: str, date: datetime) -> list:
@@ -382,17 +387,9 @@ def check_open_matches():
     if notifications:
         if len(notifications) <= 3:
             for msg in notifications:
-                send_telegram(msg)
-                time.sleep(0.5)
+                send_ntfy(msg, title="New open match 🏓")
         else:
-            header = f"🏓 <b>{len(notifications)} new open matches found!</b>\n\n"
-            combined = header + "\n---\n".join(notifications)
-            if len(combined) > 4000:
-                for msg in notifications:
-                    send_telegram(msg)
-                    time.sleep(0.5)
-            else:
-                send_telegram(combined)
+            send_ntfy("\n---\n".join(notifications), title=f"{len(notifications)} new open matches found! 🏓")
 
     save_matches_state(new_state)
 
@@ -502,17 +499,9 @@ def check_open_matches_radius():
     if notifications:
         if len(notifications) <= 3:
             for msg in notifications:
-                send_telegram(msg)
-                time.sleep(0.5)
+                send_ntfy(msg, title="New open match nearby 🏓")
         else:
-            header = f"🏓 <b>{len(notifications)} new open matches found nearby!</b>\n\n"
-            combined = header + "\n---\n".join(notifications)
-            if len(combined) > 4000:
-                for msg in notifications:
-                    send_telegram(msg)
-                    time.sleep(0.5)
-            else:
-                send_telegram(combined)
+            send_ntfy("\n---\n".join(notifications), title=f"{len(notifications)} new open matches nearby! 🏓")
 
     save_radius_matches_state(new_state)
 
@@ -577,19 +566,9 @@ def check_all_clubs():
         # Group into a single message if few, or send individually
         if len(notifications) <= 3:
             for msg in notifications:
-                send_telegram(msg)
-                time.sleep(0.5)
+                send_ntfy(msg, title="New court slot available 🎾")
         else:
-            # Batch into one message
-            header = f"🎾 <b>{len(notifications)} new court slots found!</b>\n\n"
-            combined = header + "\n---\n".join(notifications)
-            # Telegram has a 4096 char limit
-            if len(combined) > 4000:
-                for msg in notifications:
-                    send_telegram(msg)
-                    time.sleep(0.5)
-            else:
-                send_telegram(combined)
+            send_ntfy("\n---\n".join(notifications), title=f"{len(notifications)} new court slots found! 🎾")
 
     # Save state for next run
     save_state(new_state)
@@ -662,7 +641,7 @@ if __name__ == "__main__":
         log.info(f"Monitoring {len(load_clubs())} club(s), polling every {POLL_INTERVAL_SECONDS}s")
 
         # Send startup notification
-        send_telegram("🟢 Playtomic monitor started! Watching for court cancellations...")
+        send_ntfy("🟢 Playtomic monitor started! Watching for court cancellations...", title="Monitor started")
 
         while True:
             try:

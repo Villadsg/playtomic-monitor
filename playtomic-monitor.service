@@ -6,9 +6,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=gvj
-WorkingDirectory=/home/gvj/Documents/playtomic
-EnvironmentFile=/home/gvj/Documents/playtomic/.env
-ExecStart=/usr/bin/python3 /home/gvj/Documents/playtomic/playtomic_monitor.py
+WorkingDirectory=/home/gvj/playtomic-monitor
+EnvironmentFile=/home/gvj/playtomic-monitor/.env
+ExecStart=/usr/bin/python3 /home/gvj/playtomic-monitor/playtomic_monitor.py
 Restart=always
 RestartSec=30
 

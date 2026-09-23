@@ -1,16 +1,16 @@
 # Playtomic Court Cancellation Monitor
 
-Get Telegram notifications when courts become available at your favourite padel/tennis clubs on Playtomic — perfect for catching cancellations.
+Get push notifications (via [ntfy](https://ntfy.sh)) when courts become available at your favourite padel/tennis clubs on Playtomic — perfect for catching cancellations.
 
 ## Quick Start
 
-### 1. Create a Telegram Bot
+### 1. Set Up ntfy Notifications
 
-1. Open Telegram and search for **@BotFather**
-2. Send `/newbot` and follow the prompts
-3. Copy your **bot token** (looks like `123456:ABC-DEF...`)
-4. Send any message to your new bot
-5. Visit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` and find your **chat_id**
+1. Install the **ntfy** app on your phone ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) / [iOS](https://apps.apple.com/us/app/ntfy/id1625396347))
+2. In the app, subscribe to a topic with a name that's hard to guess (e.g. `padel-x7k2q`) — anyone who knows the topic name can send you messages, so don't make it simple
+3. That topic name is your `NTFY_TOPIC`
+
+> **Optional:** self-hosting ntfy or using a protected topic? Set `NTFY_SERVER` (default `https://ntfy.sh`) and `NTFY_TOKEN` (access token for restricted topics). For everyday use, the public server with an unguessable topic is fine.
 
 ### 2. Find Your Club's Tenant ID
 
@@ -29,11 +29,11 @@ This searches clubs near Madrid by default. You'll get output like:
 
 ### 3. Configure the Script
 
-Edit `playtomic_monitor.py` and fill in:
+Edit `clubs.json` to add your clubs with tenant IDs and desired time windows. Then provide the ntfy topic as an env var:
 
-- `TELEGRAM_BOT_TOKEN` — your bot token (or set as env var)
-- `TELEGRAM_CHAT_ID` — your chat ID (or set as env var)
-- `CLUBS` list — add your clubs with tenant IDs and desired time windows
+```bash
+export NTFY_TOPIC=padel-x7k2q
+```
 
 ### 4. Run It
 
@@ -48,43 +48,56 @@ python3 playtomic_monitor.py
 */5 * * * * cd /path/to/project && python3 playtomic_monitor.py once
 ```
 
-**Option C: GitHub Actions (free, recommended)**
+**Option C: Locally via systemd**
+Copy `playtomic-monitor.service` to `/etc/systemd/system/`, put `NTFY_TOPIC=...` (and optional `NTFY_SERVER`/`NTFY_TOKEN`) in a `.env` file next to the project, then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now playtomic-monitor
+```
+
+**Option D: GitHub Actions (free, recommended)**
 1. Create a private GitHub repo
-2. Copy `playtomic_monitor.py` and `.github/workflows/monitor.yml` (rename `github_actions_workflow.yml`)
-3. Go to repo Settings → Secrets → Actions and add:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_CHAT_ID`
-4. Push — the workflow runs every 5 minutes automatically
+2. Copy `playtomic_monitor.py`, `clubs.json` and `.github/workflows/monitor.yml`
+3. Go to repo Settings → Secrets and variables → Actions and add:
+   - `NTFY_TOPIC` (required)
+   - `NTFY_SERVER`, `NTFY_TOKEN` (optional)
+4. Push — the workflow runs hourly 8am–11pm Madrid time, looping every 5 minutes
 
 > Bonus: GitHub Actions rotates IP addresses on each run, reducing the chance of rate limiting.
 
 ## How It Works
 
-1. Polls `https://playtomic.io/api/v1/availability` for each configured club + date
+1. Polls `https://api.playtomic.io/api/v1/availability` for each configured club + date
 2. Filters slots by your desired time windows and days of week
 3. Compares against previously seen slots (stored in `.playtomic_state.json`)
-4. New slots = cancellations → sends Telegram notification
+4. New slots = cancellations → sends an ntfy push notification (high priority)
 5. The API is unauthenticated and allows a max 25h window per request
 
 ## Configuration Examples
 
-**Weekday evenings only:**
-```python
+**Weekday evenings only** (`clubs.json`):
+```json
 {
-    "name": "My Club",
-    "tenant_id": "xxx-xxx-xxx",
-    "desired_hours": [("18:00", "22:00")],
-    "desired_days": [0, 1, 2, 3, 4],  # Mon-Fri
+    "clubs": [
+        {
+            "name": "My Club",
+            "tenant_id": "xxx-xxx-xxx",
+            "desired_hours": [["18:00", "22:00"]],
+            "desired_days": [0, 1, 2, 3, 4]
+        }
+    ]
 }
 ```
 
 **Weekend mornings + evenings:**
-```python
+```json
 {
     "name": "Weekend Club",
     "tenant_id": "yyy-yyy-yyy",
-    "desired_hours": [("09:00", "12:00"), ("17:00", "21:00")],
-    "desired_days": [5, 6],  # Sat-Sun
+    "desired_hours": [["09:00", "12:00"], ["17:00", "21:00"]],
+    "desired_days": [5, 6],
+    "weekend_days": [5, 6]
 }
 ```
 
@@ -94,3 +107,4 @@ python3 playtomic_monitor.py
 - The API has a max 25h window per request, so each day is queried separately
 - Be respectful with polling frequency; 5 minutes is a reasonable default
 - Sport options: `PADEL`, `TENNIS`, `BADMINTON`
+- ntfy notifications are sent with **high priority** so they sound/vibrate even if your phone is in Do Not Disturb-lite modes
