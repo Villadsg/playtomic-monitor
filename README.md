@@ -12,7 +12,18 @@ Get push notifications (via [ntfy](https://ntfy.sh)) when courts become availabl
 
 > **Optional:** self-hosting ntfy or using a protected topic? Set `NTFY_SERVER` (default `https://ntfy.sh`) and `NTFY_TOKEN` (access token for restricted topics). For everyday use, the public server with an unguessable topic is fine.
 
-### 2. Find Your Club's Tenant ID
+### 2. Get a Playtomic Account
+
+The API now requires authentication. Use your normal Playtomic login:
+
+```bash
+export PLAYTOMIC_EMAIL=you@example.com
+export PLAYTOMIC_PASSWORD=yourpassword
+```
+
+(Or put both in a `.env` file next to the script for local runs.)
+
+### 3. Find Your Club's Tenant ID
 
 ```bash
 pip install requests
@@ -27,7 +38,7 @@ This searches clubs near Madrid by default. You'll get output like:
    Address: Calle Example 42, Madrid
 ```
 
-### 3. Configure the Script
+### 4. Configure the Script
 
 Edit `clubs.json` to add your clubs with tenant IDs and desired time windows. Then provide the ntfy topic as an env var:
 
@@ -35,7 +46,7 @@ Edit `clubs.json` to add your clubs with tenant IDs and desired time windows. Th
 export NTFY_TOPIC=padel-x7k2q
 ```
 
-### 4. Run It
+### 5. Run It
 
 **Option A: Locally (continuous)**
 ```bash
@@ -61,6 +72,7 @@ sudo systemctl enable --now playtomic-monitor
 2. Copy `playtomic_monitor.py`, `clubs.json` and `.github/workflows/monitor.yml`
 3. Go to repo Settings → Secrets and variables → Actions and add:
    - `NTFY_TOPIC` (required)
+   - `PLAYTOMIC_EMAIL`, `PLAYTOMIC_PASSWORD` (required)
    - `NTFY_SERVER`, `NTFY_TOKEN` (optional)
 4. Push — the workflow runs hourly 8am–11pm Madrid time, looping every 5 minutes
 
@@ -68,11 +80,11 @@ sudo systemctl enable --now playtomic-monitor
 
 ## How It Works
 
-1. Polls `https://api.playtomic.io/api/v1/availability` for each configured club + date
+1. Polls `https://api.app.playtomic.io/v1/availability` for each configured club + date (authenticated with a Bearer token from your Playtomic account)
 2. Filters slots by your desired time windows and days of week
 3. Compares against previously seen slots (stored in `.playtomic_state.json`)
 4. New slots = cancellations → sends an ntfy push notification (high priority)
-5. The API is unauthenticated and allows a max 25h window per request
+5. The API allows a max 25h window per request
 
 ## Configuration Examples
 

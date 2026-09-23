@@ -1,2 +1,4 @@
 # Playtomic Court Monitor
 .env
+.playtomic_token.json
+.playtomic_counter

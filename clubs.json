@@ -31,19 +31,10 @@
       "desired_days": [0, 1, 2, 3, 4],
       "weekend_hours": [["08:00", "13:00"]],
       "weekend_days": [5, 6]
-    },
-    {
-      "name": "BamVolea Ciudad de la Raqueta",
-      "tenant_id": "da78dd3c-43b3-11e8-8674-52540049669c",
-      "desired_hours": [["18:00", "21:00"]],
-      "desired_days": [0, 1, 2, 3, 4],
-      "weekend_hours": [["08:00", "13:00"]],
-      "weekend_days": [5, 6],
-      "indoor_only": true
     }
   ],
   "open_match_radius_search": {
-    "enabled": true,
+    "enabled": false,
     "latitude": 40.40596080353859,
     "longitude": -3.723305246417292,
     "radius_m": 1500,

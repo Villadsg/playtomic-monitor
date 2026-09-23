@@ -9,12 +9,14 @@ Setup:
   1. Install the ntfy app (https://ntfy.sh) on your phone and subscribe
      to a random topic name (e.g. "padel-x7k2q" — hard to guess so strangers can't spam you)
   2. Set the NTFY_TOPIC env var to that topic name
-  3. Find your club's tenant_id:
+  3. Set PLAYTOMIC_EMAIL and PLAYTOMIC_PASSWORD (a normal Playtomic account —
+     the API now requires a Bearer token obtained by logging in)
+  4. Find your club's tenant_id:
      - Go to https://playtomic.io and navigate to your club
      - The URL looks like: https://playtomic.io/club-name/TENANT_ID
      - Or open DevTools → Network tab → filter "availability" to see the tenant_id
   4. Configure the CLUBS list below
-  4. Run: python3 playtomic_monitor.py
+  5. Run: python3 playtomic_monitor.py
 
 Requirements:
   pip install requests
@@ -24,15 +26,30 @@ import requests
 import json
 import time
 import os
+import random
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+def _load_dotenv():
+    """Load KEY=VALUE pairs from .env next to the script (local convenience)."""
+    env_file = Path(__file__).parent / ".env"
+    if not env_file.exists():
+        return
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip())
+
+
+_load_dotenv()
 
 # ============================================================================
 # CONFIGURATION — Edit these values
 # ============================================================================
 
-# ntfy notification settings
+# ntfy notification settings (env vars, loaded from .env if present)
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
 NTFY_TOKEN = os.environ.get("NTFY_TOKEN", "")  # optional, only for protected topics
@@ -84,7 +101,14 @@ def load_radius_config() -> dict:
 # END CONFIGURATION
 # ============================================================================
 
-API_BASE = "https://api.playtomic.io/v1"
+API_BASE = os.environ.get("PLAYTOMIC_API_BASE", "https://api.app.playtomic.io/v1")
+
+# Playtomic account credentials (API requires a Bearer token since 2026)
+PLAYTOMIC_EMAIL = os.environ.get("PLAYTOMIC_EMAIL", "")
+PLAYTOMIC_PASSWORD = os.environ.get("PLAYTOMIC_PASSWORD", "")
+LOGIN_PATH = "/v3/auth/login"
+REFRESH_PATH = "/v3/auth/token"
+TOKEN_FILE = Path(__file__).parent / ".playtomic_token.json"
 STATE_FILE = Path(__file__).parent / ".playtomic_state.json"
 MATCHES_STATE_FILE = Path(__file__).parent / ".playtomic_matches_state.json"
 RADIUS_MATCHES_STATE_FILE = Path(__file__).parent / ".playtomic_radius_matches_state.json"
@@ -95,6 +119,110 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("playtomic")
+
+API_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+    "Accept": "application/json",
+}
+
+
+def _load_token() -> dict:
+    if TOKEN_FILE.exists():
+        try:
+            return json.loads(TOKEN_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_token(token: dict):
+    TOKEN_FILE.write_text(json.dumps(token, indent=2))
+    try:
+        TOKEN_FILE.chmod(0o600)  # contains session credentials
+    except Exception:
+        pass
+
+
+def _authenticate(path: str, payload: dict) -> dict:
+    """Exchange credentials or a refresh token for a new token pair."""
+    resp = requests.post(
+        f"{API_BASE.rsplit('/v1', 1)[0]}{path}",
+        json={**payload, "requested_user_roles": ["ROLE_CUSTOMER"]},
+        headers=API_HEADERS,
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Playtomic auth failed ({resp.status_code}): {resp.text[:200]}")
+    return resp.json()
+
+
+def _parse_expiry(value) -> float:
+    """Token expiry may be epoch seconds, epoch ms, or an ISO timestamp string."""
+    if isinstance(value, (int, float)):
+        v = float(value)
+        return v / 1000.0 if v > 1e12 else v
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value)
+            if dt.tzinfo is None:
+                # API returns naive UTC timestamps
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def get_bearer(force_refresh: bool = False) -> str:
+    """Return a valid access token, logging in / refreshing as needed."""
+    if not (PLAYTOMIC_EMAIL and PLAYTOMIC_PASSWORD):
+        raise RuntimeError("PLAYTOMIC_EMAIL and PLAYTOMIC_PASSWORD must be set")
+
+    token = _load_token()
+    if not force_refresh and token.get("access_token") and _parse_expiry(token.get("access_token_expiration")) > time.time() + 60:
+        return token["access_token"]
+
+    try:
+        token = _authenticate(REFRESH_PATH, {"refresh_token": token["refresh_token"]})
+    except Exception:
+        token = _authenticate(LOGIN_PATH, {"email": PLAYTOMIC_EMAIL, "password": PLAYTOMIC_PASSWORD})
+    _save_token(token)
+    return token["access_token"]
+
+
+def api_get(path: str, params: dict) -> list:
+    """
+    Authenticated GET against the Playtomic API.
+    Retries once on 401 (re-auth) and once on 429 (honouring Retry-After).
+    """
+    for attempt in (1, 2):
+        try:
+            bearer = get_bearer(force_refresh=(attempt == 2))
+        except Exception as e:
+            log.error(f"Authentication error: {e}")
+            return []
+        headers = {**API_HEADERS, "Authorization": f"Bearer {bearer}"}
+        try:
+            resp = requests.get(f"{API_BASE}{path}", params=params, headers=headers, timeout=15)
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code == 401 and attempt == 1:
+                log.warning("Got 401, forcing re-authentication...")
+                continue
+            if resp.status_code == 429 and attempt == 1:
+                retry_after = int(resp.headers.get("Retry-After", "30"))
+                log.warning(f"Rate limited (429), waiting {retry_after}s before retrying...")
+                time.sleep(min(retry_after, 120))
+                continue
+            if resp.status_code >= 500 and attempt == 1:
+                time.sleep(10)  # server hiccup — brief backoff, then one retry
+                continue
+            log.warning(f"API {path} returned {resp.status_code}")
+            return []
+        except Exception as e:
+            log.error(f"API request failed: {e}")
+            return []
+    return []
 
 # Counter file to track checks for "nothing new" throttling
 CHECK_COUNTER_FILE = Path(__file__).parent / ".playtomic_counter"
@@ -136,23 +264,8 @@ def fetch_availability(tenant_id: str, date: datetime) -> list:
         "start_min": start_min,
         "start_max": start_max,
     }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; CourtMonitor/1.0)",
-        "Accept": "application/json",
-    }
-
     try:
-        resp = requests.get(
-            f"{API_BASE}/availability",
-            params=params,
-            headers=headers,
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            return resp.json()
-        else:
-            log.warning(f"API returned {resp.status_code} for tenant {tenant_id} on {date.date()}")
-            return []
+        return api_get("/availability", params)
     except Exception as e:
         log.error(f"API request failed: {e}")
         return []
@@ -260,23 +373,8 @@ def fetch_open_matches(tenant_id: str) -> list:
         "sport_id": SPORT_ID,
         "tenant_id": tenant_id,
     }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; CourtMonitor/1.0)",
-        "Accept": "application/json",
-    }
-
     try:
-        resp = requests.get(
-            f"{API_BASE}/matches",
-            params=params,
-            headers=headers,
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            return resp.json()
-        else:
-            log.warning(f"Matches API returned {resp.status_code} for tenant {tenant_id}")
-            return []
+        return api_get("/matches", params)
     except Exception as e:
         log.error(f"Matches API request failed: {e}")
         return []
@@ -404,22 +502,13 @@ def fetch_tenants_in_radius(lat: float, lon: float, radius_m: int) -> list:
         "radius": str(radius_m),
         "size": "40",
     }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; CourtMonitor/1.0)",
-        "Accept": "application/json",
-    }
     try:
-        resp = requests.get(f"{API_BASE}/tenants", params=params, headers=headers, timeout=15)
-        if resp.status_code == 200:
-            tenants = resp.json()
-            return [
-                {"tenant_id": t.get("tenant_id"), "name": t.get("tenant_name", "Unknown")}
-                for t in tenants
-                if t.get("tenant_id")
-            ]
-        else:
-            log.warning(f"Tenants API returned {resp.status_code}")
-            return []
+        tenants = api_get("/tenants", params)
+        return [
+            {"tenant_id": t.get("tenant_id"), "name": t.get("tenant_name", "Unknown")}
+            for t in tenants
+            if t.get("tenant_id")
+        ]
     except Exception as e:
         log.error(f"Tenants API request failed: {e}")
         return []
@@ -592,30 +681,20 @@ def find_tenant_id(club_name_query: str, latitude: float = 40.4168, longitude: f
         "size": "40",
         "q": club_name_query,
     }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; CourtMonitor/1.0)",
-        "Accept": "application/json",
-    }
-
     try:
-        resp = requests.get(f"{API_BASE}/tenants", params=params, headers=headers, timeout=15)
-        if resp.status_code == 200:
-            clubs = resp.json()
-            print(f"\nFound {len(clubs)} club(s) matching '{club_name_query}':\n")
-            for c in clubs:
-                name = c.get("tenant_name", "Unknown")
-                tid = c.get("tenant_id", "N/A")
-                addr = c.get("address", {})
-                street = addr.get("street", "")
-                city = addr.get("city", "")
-                print(f"  📍 {name}")
-                print(f"     ID: {tid}")
-                print(f"     Address: {street}, {city}")
-                print()
-            return clubs
-        else:
-            print(f"Search failed with status {resp.status_code}")
-            return []
+        clubs = api_get("/tenants", params)
+        print(f"\nFound {len(clubs)} club(s) matching '{club_name_query}':\n")
+        for c in clubs:
+            name = c.get("tenant_name", "Unknown")
+            tid = c.get("tenant_id", "N/A")
+            addr = c.get("address", {})
+            street = addr.get("street", "")
+            city = addr.get("city", "")
+            print(f"  📍 {name}")
+            print(f"     ID: {tid}")
+            print(f"     Address: {street}, {city}")
+            print()
+        return clubs
     except Exception as e:
         print(f"Search error: {e}")
         return []
@@ -631,6 +710,11 @@ if __name__ == "__main__":
             print("Usage: python3 playtomic_monitor.py search <club name>")
             sys.exit(1)
         find_tenant_id(query)
+    elif len(sys.argv) > 1 and sys.argv[1] == "test":
+        # Send a fake notification through the full ntfy path
+        log.info("Sending test notification via ntfy...")
+        send_ntfy("🧪 This is a test notification from your Playtomic monitor.", title="Test notification")
+        log.info("Done — check your ntfy app.")
     elif len(sys.argv) > 1 and sys.argv[1] == "once":
         # Run a single check (useful for cron)
         log.info("Running single check...")
@@ -648,4 +732,5 @@ if __name__ == "__main__":
                 check_all_clubs()
             except Exception as e:
                 log.error(f"Unexpected error: {e}")
-            time.sleep(POLL_INTERVAL_SECONDS)
+            # Random 0-30s jitter so requests don't land at perfectly regular times
+            time.sleep(POLL_INTERVAL_SECONDS + random.uniform(0, 30))
