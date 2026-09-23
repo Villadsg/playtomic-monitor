@@ -106,6 +106,9 @@ API_BASE = os.environ.get("PLAYTOMIC_API_BASE", "https://api.app.playtomic.io/v1
 # Playtomic account credentials (API requires a Bearer token since 2026)
 PLAYTOMIC_EMAIL = os.environ.get("PLAYTOMIC_EMAIL", "")
 PLAYTOMIC_PASSWORD = os.environ.get("PLAYTOMIC_PASSWORD", "")
+# Optional: a pre-minted refresh token (`python3 playtomic_monitor.py seed`).
+# Needed on hosts whose IPs are WAF-blocked for /auth/login (e.g. GitHub Actions).
+PLAYTOMIC_REFRESH_TOKEN = os.environ.get("PLAYTOMIC_REFRESH_TOKEN", "")
 LOGIN_PATH = "/v3/auth/login"
 REFRESH_PATH = "/v3/auth/token"
 TOKEN_FILE = Path(__file__).parent / ".playtomic_token.json"
@@ -185,7 +188,10 @@ def get_bearer(force_refresh: bool = False) -> str:
     try:
         token = _authenticate(REFRESH_PATH, {"refresh_token": token["refresh_token"]})
     except Exception:
-        token = _authenticate(LOGIN_PATH, {"email": PLAYTOMIC_EMAIL, "password": PLAYTOMIC_PASSWORD})
+        if PLAYTOMIC_REFRESH_TOKEN and token.get("refresh_token") != PLAYTOMIC_REFRESH_TOKEN:
+            token = _authenticate(REFRESH_PATH, {"refresh_token": PLAYTOMIC_REFRESH_TOKEN})
+        else:
+            token = _authenticate(LOGIN_PATH, {"email": PLAYTOMIC_EMAIL, "password": PLAYTOMIC_PASSWORD})
     _save_token(token)
     return token["access_token"]
 
@@ -710,6 +716,18 @@ if __name__ == "__main__":
             print("Usage: python3 playtomic_monitor.py search <club name>")
             sys.exit(1)
         find_tenant_id(query)
+    elif len(sys.argv) > 1 and sys.argv[1] == "seed":
+        # Fresh login -> print a refresh token to paste into the
+        # PLAYTOMIC_REFRESH_TOKEN GitHub secret (for WAF-blocked hosts).
+        if not (PLAYTOMIC_EMAIL and PLAYTOMIC_PASSWORD):
+            print("Set PLAYTOMIC_EMAIL and PLAYTOMIC_PASSWORD first.")
+            sys.exit(1)
+        token = _authenticate(LOGIN_PATH, {"email": PLAYTOMIC_EMAIL, "password": PLAYTOMIC_PASSWORD})
+        _save_token(token)
+        print("\nPaste this as the PLAYTOMIC_REFRESH_TOKEN GitHub secret:\n")
+        print(token["refresh_token"])
+        print("\n(Note: single-use — the monitor rotates it and keeps the new one")
+        print("in the Actions cache. Re-run `seed` if the chain ever breaks.)")
     elif len(sys.argv) > 1 and sys.argv[1] == "test":
         # Send a fake notification through the full ntfy path
         log.info("Sending test notification via ntfy...")

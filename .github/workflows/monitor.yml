@@ -32,6 +32,7 @@ jobs:
             .playtomic_state.json
             .playtomic_matches_state.json
             .playtomic_radius_matches_state.json
+            .playtomic_token.json
             .playtomic_counter
           key: playtomic-state-${{ github.run_id }}
           restore-keys: playtomic-state-
@@ -43,6 +44,7 @@ jobs:
           NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
           PLAYTOMIC_EMAIL: ${{ secrets.PLAYTOMIC_EMAIL }}
           PLAYTOMIC_PASSWORD: ${{ secrets.PLAYTOMIC_PASSWORD }}
+          PLAYTOMIC_REFRESH_TOKEN: ${{ secrets.PLAYTOMIC_REFRESH_TOKEN }}
         run: |
           for i in $(seq 1 13); do
             echo "=== Check $i/13 ==="
